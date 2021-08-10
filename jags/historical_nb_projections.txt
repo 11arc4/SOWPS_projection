@@ -1,0 +1,96 @@
+model{
+  ############################################
+  #           Priors                         #
+  ############################################
+  
+  ###Prior on intercept (fixed effect for strata, RE for plot with the zero sum trick)
+  for(j in 1:n.strata){
+    mu.int[j] ~ dnorm(0, pow(2, -2))
+  }
+  
+  #standard deviation
+  sigma.int.plot~ dt(0,pow(1,-2),1)T(0,) 
+
+  for(p in 1:(n.plot)){
+	epsilon.int.plot[p] ~ dnorm(0, 1)
+
+     }
+
+  #intercept for plot
+  for(p in 1:n.plot){
+    alpha[p] <-  mu.int[p.strata[p]] + epsilon.int.plot[p] *sigma.int.plot
+  }
+  
+  
+  ###Prior on slope (fixed effect for strata, RE for plot with the zero sum trick)
+  for(j in 1:n.strata){
+    mu.beta[j] ~ dnorm(0, pow(0.1, -2))
+  }
+  
+  #standard deviation
+  sigma.beta.plot ~ dt(0,pow(1,-2),1)T(0,) 
+  
+  #Zero sum trick
+  for(p in 1:(n.plot)){
+epsilon.beta.plot[p] ~ dnorm(0,1)
+    #epsilon.beta.plot.star[p] ~ dnorm(0, 1) #pow(sigma.beta.plot, -2))
+    #epsilon.beta.plot[p] <- epsilon.beta.plot.star[p] - mean.eps.beta.plot
+  }
+#mean.eps.beta.plot <- mean(epsilon.beta.plot.star[])
+  #epsilon.beta.plot[n.plot] <- 0
+  
+  #slopes for plot
+  for(p in 1:n.plot){
+    beta[p] <-  mu.beta[p.strata[p]] + epsilon.beta.plot[p] *sigma.beta.plot
+  }
+  
+  #Overdispersion parameter
+  # in this case theta is equal to phi in TIP ~ NB(lambda,phi) 
+  # and var.lambda = lambda + (lambda^2)/theta 
+  #log_theta.TIP ~ dnorm(0,pow(5,-2))
+  #log(theta.TIP) <- log_theta.TIP
+ theta.TIP ~ dgamma(1,0.1)   
+############################################
+  #           Likelihood                     #
+  ############################################
+  
+  for(i in 1:n.obs){
+    TIP[i] ~ dpois(lambda[i]*rho.TIP[i])
+    rho.TIP[i] ~ dgamma(theta.TIP,theta.TIP)
+    log(lambda[i]) <- logA[i] + alpha[PLOTindex[i]] + (beta[PLOTindex[i]] * (YearID[i]-1))
+  }
+  
+  ############################################
+  #           Derived Parameters            #
+  ############################################
+  
+  #Present
+  for(j in 1:n.strata){
+    for(y in 1:n.year){
+      log(lambda.strata[j, y]) <- mu.int[j] + mu.beta[j] * (y-1) + logA[1]
+#lambda.strata is for a single plot in that strata
+    }}
+  
+  for(i in 1:n.obs){
+    lambda.plot[PLOTindex[i],YearID[i]] <- lambda[i]
+    TIP.plot[PLOTindex[i],YearID[i]] <- TIP[i]
+
+    TIP.plot_new[PLOTindex[i],YearID[i]] ~ dpois(lambda.strata[STRATindex[i], YearID[i]] * rho_new[i])
+    rho_new[i] ~ dgamma(theta.TIP,theta.TIP)
+   }
+
+  ############################################
+  #           estimate model fit             #
+  ############################################
+  for(i in 1:n.obs){
+    ld_seen[i] <- logdensity.pois(TIP[i], lambda[i]*rho.TIP[i]) * mask_TIP[i]
+    TIP_new[i] ~ dpois(lambda[i]*rho.TIP[i])
+    ld_seen_new[i] <- logdensity.pois(TIP_new[i], lambda[i]*rho.TIP[i]) * mask_TIP[i]
+  
+  }
+  fit_seen <- sum(-2* ld_seen)
+  fit_seen_new <- sum(-2* ld_seen_new)
+  
+
+	
+} 
